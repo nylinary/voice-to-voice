@@ -15,6 +15,18 @@
     <button id="start">Start</button>
     <button id="stop" disabled>Stop</button>
     <div id="status">idle</div>
+    <select id="voice">
+        <option value="marin" selected>marin</option>
+        <option value="ash">ash</option>
+        <option value="sage">sage</option>
+        <option value="alloy">alloy</option>
+        <option value="ballad">ballad</option>
+        <option value="coral">coral</option>
+        <option value="echo">echo</option>
+        <option value="shimmer">shimmer</option>
+        <option value="verse">verse</option>
+        <option value="cedar">cedar</option>
+    </select>
     <audio id="remoteAudio" autoplay></audio>
 
     <script>
@@ -55,10 +67,12 @@
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        const r = await fetch("/session", {
-          method: "POST",
-          headers: { "Content-Type": "application/sdp" },
-          body: offer.sdp,
+        const voice = document.getElementById("voice").value;
+
+        const r = await fetch(`/session?voice=${encodeURIComponent(voice)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/sdp" },
+        body: offer.sdp,
         });
 
         if (!r.ok) {
