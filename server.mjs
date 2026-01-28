@@ -45,4 +45,7 @@ app.post("/session", async (req, res) => {
   }
 });
 
-app.listen(3000, () => console.log("http://localhost:3000"));
+app.get("/health", (req, res) => res.status(200).send("ok"));
+
+const PORT = Number(process.env.PORT || 3000);
+app.listen(PORT, "0.0.0.0", () => console.log(`listening on ${PORT}`));
