@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>OpenAI Voice Demo</title>
+    <style>
+      body { font-family: system-ui, sans-serif; margin: 24px; }
+      button { padding: 10px 14px; margin-right: 8px; }
+      #status { margin-top: 12px; white-space: pre-wrap; }
+      audio { display:block; margin-top: 12px; width: 100%; }
+    </style>
+  </head>
+  <body>
+    <button id="start">Start</button>
+    <button id="stop" disabled>Stop</button>
+    <div id="status">idle</div>
+    <audio id="remoteAudio" autoplay></audio>
+
+    <script>
+      let pc = null;
+      let micStream = null;
+
+      const statusEl = document.getElementById("status");
+      const remoteAudio = document.getElementById("remoteAudio");
+      const startBtn = document.getElementById("start");
+      const stopBtn = document.getElementById("stop");
+
+      function setStatus(s) { statusEl.textContent = s; }
+
+      async function start() {
+        startBtn.disabled = true;
+        stopBtn.disabled = false;
+
+        setStatus("requesting microphone...");
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+        setStatus("creating peer connection...");
+        pc = new RTCPeerConnection();
+
+        // проигрывание аудио-ответа модели
+        pc.ontrack = (e) => {
+          remoteAudio.srcObject = e.streams[0];
+        };
+
+        // микрофон в сторону модели
+        pc.addTrack(micStream.getTracks()[0]);
+
+        // data channel (не обязателен, но полезен для событий/логов)
+        const dc = pc.createDataChannel("oai-events");
+        dc.onopen = () => console.log("data channel open");
+        dc.onmessage = (m) => console.log("event:", m.data);
+
+        setStatus("negotiating (SDP offer/answer)...");
+        const offer = await pc.createOffer();
+        await pc.setLocalDescription(offer);
+
+        const r = await fetch("/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/sdp" },
+          body: offer.sdp,
+        });
+
+        if (!r.ok) {
+          const err = await r.text();
+          throw new Error(err);
+        }
+
+        const answer = { type: "answer", sdp: await r.text() };
+        await pc.setRemoteDescription(answer);
+
+        setStatus("connected. speak now.");
+      }
+
+      function stop() {
+        stopBtn.disabled = true;
+        startBtn.disabled = false;
+
+        if (micStream) {
+          micStream.getTracks().forEach(t => t.stop());
+          micStream = null;
+        }
+        if (pc) {
+          pc.getSenders().forEach(s => s.track && s.track.stop());
+          pc.close();
+          pc = null;
+        }
+        remoteAudio.srcObject = null;
+        setStatus("stopped.");
+      }
+
+      startBtn.onclick = () => start().catch((e) => {
+        console.error(e);
+        setStatus("error:\n" + (e?.message || String(e)));
+        stop();
+      });
+
+      stopBtn.onclick = stop;
+    </script>
+  </body>
+</html>
